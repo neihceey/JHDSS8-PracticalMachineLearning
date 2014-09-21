@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="Practical Machine Learning Project : ">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Practical Machine Learning Project</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/neihceey/JHDSS8-PracticalMachineLearning">View on GitHub</a>
+
+          <h1 id="project_title">Practical Machine Learning Project</h1>
+          <h2 id="project_tagline"></h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/neihceey/JHDSS8-PracticalMachineLearning/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/neihceey/JHDSS8-PracticalMachineLearning/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h2>
+<a name="practical-machine-learning-project" class="anchor" href="#practical-machine-learning-project"><span class="octicon octicon-link"></span></a>Practical Machine Learning Project</h2>
+
+<h2>
+<a name="september-2014" class="anchor" href="#september-2014"><span class="octicon octicon-link"></span></a>September 2014</h2>
+
+<p>This writeup is for my project for the Practical Machine Learning course offered by the Johns Hopkins University School of Biostatistics and Coursera.</p>
+
+<h3>
+<a name="executive-summary" class="anchor" href="#executive-summary"><span class="octicon octicon-link"></span></a>Executive Summary</h3>
+
+<p>The given datasets which came from <a href="http://groupware.les.inf.puc-rio.br/har">http://groupware.les.inf.puc-rio.br/har</a>, consist of data from six participants. The participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions labelled as A, B, C, D, E in the variable 'classe'.</p>
+
+<p>The data from accelerameters attached to the participants' belts, forearms, arms and dumbells are recorded while they are performing the biceps curls. The goal of this project is to predict the manner in which they did the exercise.</p>
+
+<p>3 models (Classiication Tree, Linear Discriminant Analysis and Random Forests) with 4-fold cross validation are used on the training data. Random Forests gives the best in sample error at 0.9997, with out of sample accuracy estimated to be 0.978. </p>
+
+<h3>
+<a name="getting-and-cleaning-data" class="anchor" href="#getting-and-cleaning-data"><span class="octicon octicon-link"></span></a>Getting and Cleaning Data</h3>
+
+<p>The training and test data sets are downloaded from <a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv</a> and <a href="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv">https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv</a> and saved in the working directory as "pml-training.csv" and "pml-testing.csv" respetively. </p>
+
+<div class="highlight highlight-r"><pre>train_data <span class="o">&lt;-</span> read.csv<span class="p">(</span>file<span class="o">=</span><span class="s">"pml-training.csv"</span><span class="p">,</span> header<span class="o">=</span><span class="kc">TRUE</span><span class="p">,</span> na.strings<span class="o">=</span><span class="kt">c</span><span class="p">(</span><span class="s">"NA"</span><span class="p">,</span><span class="s">""</span><span class="p">))</span>
+test_data <span class="o">&lt;-</span> read.csv<span class="p">(</span>file<span class="o">=</span><span class="s">"pml-testing.csv"</span><span class="p">,</span> header<span class="o">=</span><span class="kc">TRUE</span><span class="p">,</span> na.strings<span class="o">=</span><span class="kt">c</span><span class="p">(</span><span class="s">"NA"</span><span class="p">,</span><span class="s">""</span><span class="p">))</span>
+</pre></div>
+
+<p>The training data set consists of <code>r dim(train_data)[1]</code> records and <code>r dim(train_data)[2]</code> variables, while the test data set consists of <code>r dim(test_data)[1]</code> records and <code>r dim(test_data)[2]</code> variables. This is a strange as the test data set should have 1 variable less than the traiing data set - the variable "classe" which is to be predicted.</p>
+
+<div class="highlight highlight-r"><pre>diffCol <span class="o">&lt;-</span> <span class="kp">which</span><span class="p">(</span><span class="o">!</span><span class="kp">names</span><span class="p">(</span>train_data<span class="p">)</span><span class="o">==</span><span class="kp">names</span><span class="p">(</span>test_data<span class="p">))</span>
+<span class="kp">names</span><span class="p">(</span>train_data<span class="p">)[</span>diffCol<span class="p">]</span>
+<span class="kp">names</span><span class="p">(</span>test_data<span class="p">)[</span>diffCol<span class="p">]</span>
+</pre></div>
+
+<p>It can be seen that the 2 sets have identical variables except for "classe" in the training set and "problem_id" in the test set. </p>
+
+<pre lang="r,"><code>names(train_data)[1:10]
+</code></pre>
+
+<p>It is also noticed that the first 7 variables are not measurements from the accelerometers and hence can be discarded.</p>
+
+<p>A quick inspection of the data using 'summary' suggests that there are many variables which have NA or empty values and perhaps some which are constants (no variabilty). These variables are discarded from the dataframe. </p>
+
+<pre lang="r,"><code>## delete irrelevant variables, ie columns 1 to 7 
+train_data &lt;- train_data[,-(1:7)]
+test_data &lt;- test_data[,-(1:7)]
+
+## remove columns in training set with all NA or empty values 
+NA_col &lt;- apply(train_data,2,function(x){sum(is.na(x))})
+train_data &lt;- train_data[, which(NA_col == 0)]
+test_data &lt;- test_data[, which(NA_col == 0)]
+
+## check for columns in training set with no variability and remove them
+library(caret)
+no_var &lt;- nearZeroVar(train_data, saveMetrics=TRUE)
+train_data &lt;- train_data[,no_var$nzv=="FALSE"] 
+test_data &lt;- test_data[,no_var$nzv=="FALSE"] 
+</code></pre>
+
+<p><code>r dim(train_data)[2]</code> variables (including 'classe') remain after trimming.</p>
+
+<h3>
+<a name="building-model" class="anchor" href="#building-model"><span class="octicon octicon-link"></span></a>Building Model</h3>
+
+<p>As the number of predictor variables is rather large, pre-processing using Principal Component Analysis (PCA) was carried out to try to reduce the number of predictors.</p>
+
+<pre lang="r,"><code>## Covert integer data to numeric data
+train_data[, -53] &lt;- sapply(train_data[, -53], as.numeric)
+test_data[, -53] &lt;- sapply(test_data[, -53], as.numeric)
+
+## Pre-processing: reduce predictor variables using PCA
+preObj &lt;-preProcess(train_data[,-53],method='pca')
+
+train_pca &lt;- predict(preObj, train_data[,-53])
+train_pca$classe &lt;- train_data$classe
+
+test_pca &lt;- predict(preObj, test_data[,-53])
+test_pca$problem_id &lt;- test_data$problem_id
+</code></pre>
+
+<p>The <code>r dim(train_data)[2] - 1</code> predictor variables is reduced to <code>r dim(train_pca)[2]</code> components.</p>
+
+<p>Since the data set is large, it is split into 2 sets, consisting of 75% training set and 25% validation set. </p>
+
+<pre lang="r,"><code>## partition into training and cross validation sets
+set.seed(20140920)
+inTrain &lt;- createDataPartition(train_pca$classe, p=0.75, list=FALSE)
+trainDat &lt;- trainLess1[inTrain,]
+crossVal &lt;- trainLess1[-inTrain,]
+</code></pre>
+
+<p>3 models are built, using 4-fold cross-validation where possible.</p>
+
+<ul>
+<li>Model 1 : Classification Tree </li>
+</ul><pre lang="r,"><code>library(tree)
+model1 &lt;- tree(classe ~., data=trainDat)
+train_pred1 &lt;- predict(model1, trainDat, type="class")
+confusionMatrix(train_pred1, trainDat$classe)
+</code></pre>
+
+<p>Model 1 takes seconds to run, with in-sample accuracy of 0.4645, which is rather low. </p>
+
+<ul>
+<li>Model 2: Linear Discriminant Analysis</li>
+</ul><pre lang="r,"><code>library(MASS)
+model2 &lt;- train(classe ~., method="lda", data=trainDat, 
+                trControl=trainControl(method="cv", number=4))
+train_pred2 &lt;- predict(model2, trainDat)
+confusionMatrix(train_pred2, trainDat$classe)
+</code></pre>
+
+<p>Model 2 takes seconds to run, with an in-sample accuracy of 0.5312 - higher than Model 1, but still rather low.</p>
+
+<ul>
+<li>Model 3: Random Forests</li>
+</ul><pre lang="r,"><code>library(randomForest)
+model3 &lt;- randomForest(classe ~., data=trainDat)
+train_pred3 &lt;- predict(model3, trainDat)
+confusionMatrix(train_pred3, trainDat$classe)
+</code></pre>
+
+<p>Model 3 takes about 30 seconds to run, with an  in-sample accuracy of 1, which is the highest amongst the 3 models.</p>
+
+<p>Model 3 is selected as it has the highest accuracy, with a small tradeoff of taking a slightly longer time to run.</p>
+
+<h3>
+<a name="out-of-sample-error" class="anchor" href="#out-of-sample-error"><span class="octicon octicon-link"></span></a>Out of Sample Error</h3>
+
+<p>To estimate the out of sample error, the selected model is run on the validation set.</p>
+
+<div class="highlight highlight-r"><pre>cross_pred3 <span class="o">&lt;-</span> predict<span class="p">(</span>model3<span class="p">,</span> crossVal<span class="p">)</span>
+confusionMatrix<span class="p">(</span>cross_pred3<span class="p">,</span> crossVal<span class="o">$</span>classe<span class="p">)</span>
+</pre></div>
+
+<p>The out of sample error is estimated to be 0.978, lower than the in-sample accuracy as expected.</p>
+
+<h3>
+<a name="predictions-on-test-data" class="anchor" href="#predictions-on-test-data"><span class="octicon octicon-link"></span></a>Predictions on test data</h3>
+
+<pre lang="r,"><code>test_pred &lt;- predict(model3, test_pca)
+</code></pre>
+
+<p>The predictions for the test data are <code>r test_pred</code>.
+19 of the 20 predictions are correct when submitted.</p>
+
+<pre lang="r,"><code>## Write predictions into files for submission
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(test_pred)
+</code></pre>
+
+<p>Reference:</p>
+
+<p>Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.</p>
+
+<p>Read more: <a href="http://groupware.les.inf.puc-rio.br/har#ixzz3DqAExe42">http://groupware.les.inf.puc-rio.br/har#ixzz3DqAExe42</a></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Practical Machine Learning Project maintained by <a href="https://github.com/neihceey">neihceey</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
