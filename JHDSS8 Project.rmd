@@ -1,0 +1,147 @@
+---
+title: "Practical Machine Learning Project"
+date: "September 2014"
+output: html_document
+---
+This writeup is for my project for the Practical Machine Learning course offered by the Johns Hopkins University School of Biostatistics and Coursera.
+
+##### Executive Summary
+The given datasets which came from http://groupware.les.inf.puc-rio.br/har, consist of data from six participants. The participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions labelled as A, B, C, D, E in the variable 'classe'.
+
+The data from accelerameters attached to the participants' belts, forearms, arms and dumbells are recorded while they are performing the biceps curls. The goal of this project is to predict the manner in which they did the exercise.
+
+3 models (Classiication Tree, Linear Discriminant Analysis and Random Forests) with 4-fold cross validation are used on the training data. Random Forests gives the best in sample error at 0.9997, with out of sample accuracy estimated to be 0.978. 
+
+##### Getting and Cleaning Data 
+The training and test data sets are downloaded from https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv and https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv and saved in the working directory as "pml-training.csv" and "pml-testing.csv" respetively. 
+
+```{r}
+train_data <- read.csv(file="pml-training.csv", header=TRUE, na.strings=c("NA",""))
+test_data <- read.csv(file="pml-testing.csv", header=TRUE, na.strings=c("NA",""))
+```
+The training data set consists of `r dim(train_data)[1]` records and `r dim(train_data)[2]` variables, while the test data set consists of `r dim(test_data)[1]` records and `r dim(test_data)[2]` variables. This is a strange as the test data set should have 1 variable less than the traiing data set - the variable "classe" which is to be predicted.
+
+```{r}
+diffCol <- which(!names(train_data)==names(test_data))
+names(train_data)[diffCol]
+names(test_data)[diffCol]
+```
+It can be seen that the 2 sets have identical variables except for "classe" in the training set and "problem_id" in the test set. 
+
+```{r, checking variables}
+names(train_data)[1:10]
+```
+It is also noticed that the first 7 variables are not measurements from the accelerometers and hence can be discarded.
+
+A quick inspection of the data using 'summary' suggests that there are many variables which have NA or empty values and perhaps some which are constants (no variabilty). These variables are discarded from the dataframe. 
+
+```{r, trimming variables}
+## delete irrelevant variables, ie columns 1 to 7 
+train_data <- train_data[,-(1:7)]
+test_data <- test_data[,-(1:7)]
+
+## remove columns in training set with all NA or empty values 
+NA_col <- apply(train_data,2,function(x){sum(is.na(x))})
+train_data <- train_data[, which(NA_col == 0)]
+test_data <- test_data[, which(NA_col == 0)]
+
+## check for columns in training set with no variability and remove them
+library(caret)
+no_var <- nearZeroVar(train_data, saveMetrics=TRUE)
+train_data <- train_data[,no_var$nzv=="FALSE"] 
+test_data <- test_data[,no_var$nzv=="FALSE"] 
+```
+`r dim(train_data)[2]` variables (including 'classe') remain after trimming.
+
+##### Building Model
+As the number of predictor variables is rather large, pre-processing using Principal Component Analysis (PCA) was carried out to try to reduce the number of predictors.
+```{r, pre-processing}
+## Covert integer data to numeric data
+train_data[, -53] <- sapply(train_data[, -53], as.numeric)
+test_data[, -53] <- sapply(test_data[, -53], as.numeric)
+
+## Pre-processing: reduce predictor variables using PCA
+preObj <-preProcess(train_data[,-53],method='pca')
+
+train_pca <- predict(preObj, train_data[,-53])
+train_pca$classe <- train_data$classe
+
+test_pca <- predict(preObj, test_data[,-53])
+test_pca$problem_id <- test_data$problem_id
+```
+The `r dim(train_data)[2] - 1` predictor variables is reduced to `r dim(train_pca)[2]` components.
+
+Since the data set is large, it is split into 2 sets, consisting of 75% training set and 25% validation set. 
+```{r, split data}
+## partition into training and cross validation sets
+set.seed(20140920)
+inTrain <- createDataPartition(train_pca$classe, p=0.75, list=FALSE)
+trainDat <- trainLess1[inTrain,]
+crossVal <- trainLess1[-inTrain,]
+```
+
+3 models are built, using 4-fold cross-validation where possible.
+
+* Model 1 : Classification Tree 
+```{r, building model 1}
+library(tree)
+model1 <- tree(classe ~., data=trainDat)
+train_pred1 <- predict(model1, trainDat, type="class")
+confusionMatrix(train_pred1, trainDat$classe)
+```
+Model 1 takes seconds to run, with in-sample accuracy of 0.4645, which is rather low. 
+
+* Model 2: Linear Discriminant Analysis
+```{r, building model 2}
+library(MASS)
+model2 <- train(classe ~., method="lda", data=trainDat, 
+                trControl=trainControl(method="cv", number=4))
+train_pred2 <- predict(model2, trainDat)
+confusionMatrix(train_pred2, trainDat$classe)
+```
+Model 2 takes seconds to run, with an in-sample accuracy of 0.5312 - higher than Model 1, but still rather low.
+
+* Model 3: Random Forests
+```{r, building model 3}
+library(randomForest)
+model3 <- randomForest(classe ~., data=trainDat)
+train_pred3 <- predict(model3, trainDat)
+confusionMatrix(train_pred3, trainDat$classe)
+```
+Model 3 takes about 30 seconds to run, with an  in-sample accuracy of 1, which is the highest amongst the 3 models.
+
+Model 3 is selected as it has the highest accuracy, with a small tradeoff of taking a slightly longer time to run.
+
+##### Out of Sample Error
+To estimate the out of sample error, the selected model is run on the validation set.
+```{r out of sample error}
+cross_pred3 <- predict(model3, crossVal)
+confusionMatrix(cross_pred3, crossVal$classe)
+```
+The out of sample error is estimated to be 0.978, lower than the in-sample accuracy as expected.
+
+##### Predictions on test data
+```{r, predictions}
+test_pred <- predict(model3, test_pca)
+```
+The predictions for the test data are `r test_pred`.
+19 of the 20 predictions are correct when submitted.
+
+```{r, write answers for submission, echo=FALSE}
+## Write predictions into files for submission
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+        filename = paste0("problem_id_",i,".txt")
+        write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+
+pml_write_files(test_pred)
+```
+
+Reference:
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3DqAExe42
